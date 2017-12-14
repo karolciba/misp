@@ -1,6 +1,11 @@
 #include <iostream>
 #include <vector>
 #include <stdexcept>
+#include <memory>
+
+using std::unique_ptr;
+using std::shared_ptr;
+using std::weak_ptr;
 
 int LEVEL = 5;
 int ERROR = 1;
@@ -36,9 +41,12 @@ public:
 	}
 };
 
-std::ostream &operator<<(std::ostream &os, Token* const &t) { 
+std::ostream &operator<<(std::ostream &os, shared_ptr<Token> const &t) { 
 	return os << "Token(" << t->type << "," << t->value << ")";
 }
+// std::ostream &operator<<(std::ostream &os, weak_ptr<Token> const &t) { 
+// 	return os << "Token(" << t->type << "," << t->value << ")";
+// }
 
 class Type {
 };
@@ -53,7 +61,7 @@ public:
 };
 
 class Reader {
-	Token* previous;
+	shared_ptr<Token> previous;
 public:
 	Reader() : previous(nullptr) {};
 
@@ -69,11 +77,9 @@ public:
 		return c == '\n';
 	}
 
-	Token* get_token() {
+	shared_ptr<Token> get_token() {
 		if (previous) {
-			Token* ref = previous;
-			previous = nullptr;
-			return ref;
+			return std::move(previous);
 		}
 
 		char c;
@@ -83,15 +89,15 @@ public:
 		} while (!std::cin.eof() && is_space(c));
 
 		if (std::cin.eof()) {
-			return new Token(Tokens::Eol);
+			return shared_ptr<Token>(new Token(Tokens::Eol));
 		}
 		if (is_newline(c)) {
-			return new Token(Tokens::NewLine);
+			return shared_ptr<Token>(new Token(Tokens::NewLine));
 		}
 		else if (c == '(') {
-			return new Token(Tokens::LeftParen);
+			return shared_ptr<Token>(new Token(Tokens::LeftParen));
 		} else if (c == ')') {
-			return new Token(Tokens::RightParen);
+			return shared_ptr<Token>(new Token(Tokens::RightParen));
 		} else {
 			Token* t = new Token(Tokens::Atom);
 			while (!std::cin.eof() && !is_space(c) && !is_paren(c)) {
@@ -99,23 +105,23 @@ public:
 				c = std::cin.get();
 			}
 			std::cin.putback(c);
-			return t;
+			return shared_ptr<Token>(t);
 		}
 	}
-	void put_back(Token* t) {
-		previous = t;
+	void put_back(shared_ptr<Token> t) {
+		previous = std::move(t);
 	}
-	Token* peek() {
+	shared_ptr<Token> peek() {
 		if (previous) {
 			return previous;
 		}
-		Token* t = get_token();
+		auto t = get_token();
 		previous = t;
 		return t;
 	}
 
 	Type* read_form() {
-		Token* p = peek();
+		auto p = peek();
 		trace("read_form peek: " << p << "\n");
 		switch (p->type) {
 			case Tokens::Atom:
@@ -135,7 +141,7 @@ public:
 	ListType* read_list() {
 		ListType* l;
 		while (true) {
-			Token* p = peek();
+			auto p = peek();
 			trace("read_list peek: " << p << "\n");
 			switch (p->type) {
 				case Tokens::RightParen:
@@ -151,7 +157,7 @@ public:
 		}
 	}
 	AtomType* read_atom() {
-		Token *t = get_token();
+		auto t = get_token();
 		trace("read_atom token: " << t << "\n");
 		return new AtomType(t->value);
 	}
