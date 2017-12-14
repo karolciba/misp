@@ -50,12 +50,12 @@ public:
 	}
 };
 
-std::ostream &operator<<(std::ostream &os, shared_ptr<Token> const &t) { 
+std::ostream &operator<<(std::ostream &os, Token* const &t) { 
 	return os << "Token(" << t->type << "," << t->value << ")";
 }
-// std::ostream &operator<<(std::ostream &os, weak_ptr<Token> const &t) { 
-// 	return os << "Token(" << t->type << "," << t->value << ")";
-// }
+std::ostream &operator<<(std::ostream &os, unique_ptr<Token> t) { 
+	return os << "Token(" << t->type << "," << t->value << ")";
+}
 
 class Type {
 public:
@@ -73,7 +73,7 @@ public:
 };
 class ListType : public Type {
 public:
-	std::vector<shared_ptr<Type>> data;
+	std::vector<unique_ptr<Type>> data;
 	ListType() {
 		trace("Conctruting ListType\n");
 	}
@@ -87,7 +87,7 @@ public:
 };
 
 class Reader {
-	shared_ptr<Token> previous;
+	unique_ptr<Token> previous;
 
 	bool is_space(char c) {
 		return c == ' ' or c == '\t';
@@ -103,7 +103,7 @@ class Reader {
 
 public:
 	Reader() : previous(nullptr) {};
-	shared_ptr<Token> get_token() {
+	unique_ptr<Token> get_token() {
 		if (previous) {
 			return std::move(previous);
 		}
@@ -115,15 +115,15 @@ public:
 		} while (!std::cin.eof() && is_space(c));
 
 		if (std::cin.eof()) {
-			return shared_ptr<Token>(new Token(Tokens::Eol));
+			return unique_ptr<Token>(new Token(Tokens::Eol));
 		}
 		if (is_newline(c)) {
-			return shared_ptr<Token>(new Token(Tokens::NewLine));
+			return unique_ptr<Token>(new Token(Tokens::NewLine));
 		}
 		else if (c == '(') {
-			return shared_ptr<Token>(new Token(Tokens::LeftParen));
+			return unique_ptr<Token>(new Token(Tokens::LeftParen));
 		} else if (c == ')') {
-			return shared_ptr<Token>(new Token(Tokens::RightParen));
+			return unique_ptr<Token>(new Token(Tokens::RightParen));
 		} else {
 			Token* t = new Token(Tokens::Atom);
 			while (!std::cin.eof() && !is_space(c) && !is_paren(c)) {
@@ -131,26 +131,25 @@ public:
 				c = std::cin.get();
 			}
 			std::cin.putback(c);
-			return shared_ptr<Token>(t);
+			return unique_ptr<Token>(t);
 		}
 	}
 
-	void put_back(shared_ptr<Token> t) {
+	void put_back(unique_ptr<Token> t) {
 		previous = std::move(t);
 	}
 
-	shared_ptr<Token> peek() {
+	unique_ptr<Token>& peek() {
 		if (previous) {
 			return previous;
 		}
-		auto t = get_token();
-		previous = t;
-		return t;
+		previous = get_token();
+		return previous;
 	}
 
-	shared_ptr<Type> read_form() {
-		auto p = peek();
-		trace("read_form peek: " << p << "\n");
+	unique_ptr<Type> read_form() {
+		auto& p = peek();
+		trace("read_form peek: " << &p << "\n");
 		switch (p->type) {
 			case Tokens::Atom:
 				trace("read_form found: Atom Token\n");
@@ -173,28 +172,28 @@ public:
 				throw std::runtime_error("Syntax error");
 		}
 	}
-	shared_ptr<ListType> read_list() {
-		auto l = shared_ptr<ListType>(new ListType());
+	unique_ptr<ListType> read_list() {
+		auto l = unique_ptr<ListType>(new ListType());
 		while (true) {
-			auto p = peek();
-			trace("read_list peek: " << p << "\n");
+			auto& p = peek();
+			trace("read_list peek: " << &p << "\n");
 			switch (p->type) {
 				case Tokens::RightParen:
 					get_token();
-					trace("read_list found closing paren: " << p << "\n");
+					trace("read_list found closing paren: " << &p << "\n");
 					return l;
 					break;
 				default:
-					trace("read_list reading atom " << p << "\n");
-					auto tp = shared_ptr<Type>(read_form());
-					l->data.push_back(tp);
+					trace("read_list reading atom " << &p << "\n");
+					auto tp = unique_ptr<Type>(read_form());
+					l->data.push_back(std::move(tp));
 			}
 		}
 	}
-	shared_ptr<AtomType> read_atom() {
+	unique_ptr<AtomType> read_atom() {
 		auto t = get_token();
-		trace("read_atom token: " << t << "\n");
-		return shared_ptr<AtomType>(new AtomType(t->value));
+		trace("read_atom token: " << &t << "\n");
+		return unique_ptr<AtomType>(new AtomType(t->value));
 	}
 };
 
