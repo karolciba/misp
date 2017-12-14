@@ -1,4 +1,5 @@
 #include <iostream>
+#include <typeinfo>
 #include <vector>
 #include <stdexcept>
 #include <memory>
@@ -9,6 +10,7 @@ using std::weak_ptr;
 using std::make_shared;
 
 int LEVEL = 5;
+// int LEVEL = 0;
 int ERROR = 1;
 int WARN  = 2;
 int INFO  = 3;
@@ -28,8 +30,8 @@ enum Tokens {
 
 class Token {
 public:
-	std::string value;
 	Tokens type;
+	std::string value;
 
 	Token(Tokens t, std::string v = "") : type(t), value(v) {
 		switch (t) {
@@ -38,6 +40,8 @@ public:
 				break;
 			case Tokens::RightParen:
 				value = ')';
+				break;
+			default:
 				break;
 		}
 		trace("Constr on Token(" << t << ", \"" << value << "\")\n");
@@ -63,6 +67,7 @@ public:
 		std::cout << "[base]";
 	};
 };
+
 class AtomType : public Type {
 public:
 	std::string value;
@@ -71,6 +76,7 @@ public:
 		std::cout << "[Atom " << value << "]";
 	}
 };
+
 class ListType : public Type {
 public:
 	std::vector<unique_ptr<Type>> data;
@@ -126,7 +132,7 @@ public:
 			return unique_ptr<Token>(new Token(Tokens::RightParen));
 		} else {
 			Token* t = new Token(Tokens::Atom);
-			while (!std::cin.eof() && !is_space(c) && !is_paren(c)) {
+			while (!std::cin.eof() && !is_newline(c) && !is_space(c) && !is_paren(c)) {
 				t->value += c;
 				c = std::cin.get();
 			}
@@ -197,6 +203,10 @@ public:
 	}
 };
 
+class Eval {
+public:
+}
+
 class Printer {
 public:
 	void print(Type t) {
@@ -211,6 +221,12 @@ int main(int argc, char** argv) {
 		if (t) {
 			t->print();
 			std::cout << "\n";
+			if (dynamic_cast<ListType*>(t.get())) {
+				std::cout << "list" << "\n";
+			}
+			if (dynamic_cast<AtomType*>(t.get())) {
+				std::cout << "atom" << "\n";
+			}
 		}
 	} while (!std::cin.eof());
 }
