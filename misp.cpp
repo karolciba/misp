@@ -1,16 +1,18 @@
 #include <iostream>
 #include <typeinfo>
 #include <vector>
+#include <deque>
 #include <stdexcept>
 #include <memory>
+#include <string>
 
 using std::unique_ptr;
 using std::shared_ptr;
 using std::weak_ptr;
 using std::make_shared;
 
-int LEVEL = 5;
-// int LEVEL = 0;
+// int LEVEL = 5;
+int LEVEL = 0;
 int ERROR = 1;
 int WARN  = 2;
 int INFO  = 3;
@@ -66,6 +68,10 @@ public:
 	virtual void print() {
 		std::cout << "[base]";
 	};
+	virtual unique_ptr<Type> eval(Type* args=nullptr) {
+		trace("Type#eval\n");
+		return nullptr;
+	}
 };
 
 class AtomType : public Type {
@@ -75,11 +81,22 @@ public:
 	void print() {
 		std::cout << "[Atom " << value << "]";
 	}
+	unique_ptr<Type> eval(Type *args=nullptr) {
+		trace("AtomType#eval\n");
+		return unique_ptr<Type>(new AtomType(value));
+	}
+};
+
+class FunctionType : public Type {
+public:
+	unique_ptr<Type> eval(Type *args) {
+		trace("FunctionType#eval\n");
+	}
 };
 
 class ListType : public Type {
 public:
-	std::vector<unique_ptr<Type>> data;
+	std::deque<unique_ptr<Type>> data;
 	ListType() {
 		trace("Conctruting ListType\n");
 	}
@@ -89,6 +106,39 @@ public:
 			i->print();
 		}
 		std::cout << "]";
+	}
+	unique_ptr<Type> eval(Type *inargs=nullptr) {
+		trace("ListType#eval\n");
+
+		if (data.size() == 0) {
+			trace("ListType#eval empty list\n");
+			return unique_ptr<Type> (new ListType());
+		}
+
+		unique_ptr<Type> op = std::move(*data.begin());
+		// unique_ptr<Type> eop = op->eval();
+		AtomType* aop = dynamic_cast<AtomType*>(op.get());
+		if (!aop) {
+			std::cout << "SYNTAX ERROR" << "\n";
+		}
+		data.pop_front();
+		trace("ListType#eval got operator\n");
+
+		auto args = unique_ptr<ListType>(new ListType());
+		for (auto it = data.begin(); it != data.end(); it++) {
+			args->data.push_back( (*it)->eval() );
+		}
+		trace("ListType#eval got evaluated params\n");
+
+		if (aop->value == "+") {
+			int value = 0;
+			for (auto it = args->data.begin(); it != args->data.end(); it++) {
+				value += std::stoi( (dynamic_cast<AtomType*>((*it).get()))->value);
+			}
+			return unique_ptr<Type>(new AtomType(std::to_string(value)));
+		}
+
+		return std::move(aop->eval(args.get()));
 	}
 };
 
@@ -203,9 +253,18 @@ public:
 	}
 };
 
-class Eval {
-public:
-}
+// class Eval {
+// public:
+// 	unique_ptr<Type> eval(Type *ast);
+// 	unique_ptr<Type> eval_ast(Type* ast) {
+// 		if (dynamic_cast<AtomType*>(ast.get())) {
+// 			std::cout << "atom" << "\n";
+// 		}
+// 		if (dynamic_cast<ListType*>(ast.get())) {
+// 			std::cout << "list" << "\n";
+// 		}
+// 	}
+// };
 
 class Printer {
 public:
@@ -219,14 +278,13 @@ int main(int argc, char** argv) {
 		std::cout << "user> ";
 		auto t = reader.read_form();
 		if (t) {
+			trace("Print ast\n");
 			t->print();
 			std::cout << "\n";
-			if (dynamic_cast<ListType*>(t.get())) {
-				std::cout << "list" << "\n";
-			}
-			if (dynamic_cast<AtomType*>(t.get())) {
-				std::cout << "atom" << "\n";
-			}
+			trace("Eval ast\n");
+			auto ret = t->eval();
+			ret->print();
+			std::cout << "\n";
 		}
 	} while (!std::cin.eof());
 }
