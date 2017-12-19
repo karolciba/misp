@@ -3,6 +3,7 @@
 #include <vector>
 #include <deque>
 #include <stdexcept>
+#include <unordered_map>
 #include <memory>
 #include <string>
 
@@ -85,19 +86,29 @@ public:
 		trace("AtomType#eval\n");
 		return unique_ptr<Type>(new AtomType(value));
 	}
+	bool operator==(const AtomType& other) {
+		return value == other.value;
+	}
 };
 
-class FunctionType : public Type {
+
+class Env {
 public:
-	unique_ptr<Type> eval(Type *args) {
-		trace("FunctionType#eval\n");
-	}
+	shared_ptr<Env> outer;
+	std::unordered_map<std::string, Type*> env;
+
+	Env();
+
+	void set(std::string key, Type* value);
+	Type* find(std::string key);
 };
 
 class ListType : public Type {
 public:
 	std::deque<unique_ptr<Type>> data;
+	Env* env;
 	ListType() {
+		env = new Env();
 		trace("Conctruting ListType\n");
 	}
 	void print() {
@@ -128,19 +139,57 @@ public:
 		for (auto it = data.begin(); it != data.end(); it++) {
 			args->data.push_back( (*it)->eval() );
 		}
-		trace("ListType#eval got evaluated params\n");
 
 		if (aop->value == "+") {
-			int value = 0;
-			for (auto it = args->data.begin(); it != args->data.end(); it++) {
-				value += std::stoi( (dynamic_cast<AtomType*>((*it).get()))->value);
-			}
-			return unique_ptr<Type>(new AtomType(std::to_string(value)));
+			Type* fn = env->find("+");
+			return fn->eval(args.get());
 		}
+		trace("ListType#eval got evaluated params\n");
 
 		return std::move(aop->eval(args.get()));
 	}
 };
+
+class FunctionType : public Type {
+public:
+	Env* env;
+	FunctionType(Env* ienv) : env(ienv) { }
+	unique_ptr<Type> eval(Type* args) {
+		trace("FunctionType#eval\n");
+	}
+};
+
+class PlusFunctionType : public FunctionType {
+public:
+	PlusFunctionType(Env *ienv) : FunctionType(ienv) { }
+	unique_ptr<Type> eval(Type* oargs) {
+		trace("PlusFunctionType#eval\n");
+		ListType* args = dynamic_cast<ListType*>(oargs);
+		int value = 0;
+		for (auto it = args->data.begin(); it != args->data.end(); it++) {
+			value += std::stoi( (dynamic_cast<AtomType*>((*it).get()))->value);
+		}
+		return unique_ptr<Type>(new AtomType(std::to_string(value)));
+	}
+};
+
+
+Env::Env() {
+	env["+"] = new PlusFunctionType(this);
+	env["-"] = new PlusFunctionType(this);
+}
+
+void Env::set(std::string key, Type* value) {
+	env[key] = value;
+}
+
+Type* Env::find(std::string key) {
+	auto it = env.find(key);
+	if (it != env.end()) {
+		return (it->second);
+	}
+	return nullptr;
+}
 
 class Reader {
 	unique_ptr<Token> previous;
