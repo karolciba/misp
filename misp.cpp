@@ -72,6 +72,7 @@ public:
 	std::unordered_map<std::string, shared_ptr<Type>> env;
 
 	Env();
+    Env(Env* iouter) : outer(iouter) { };
 
 	void set(std::string key, shared_ptr<Type> value);
 	shared_ptr<Env>find(std::string key);
@@ -183,10 +184,60 @@ public:
         std::cout << "[#function]";
     }
 
-    shared_ptr<Type> eval(Type* args, Env* env) {
+    shared_ptr<Type> eval(Env &env, Type* oargs) {
         trace("FunctionType#eval\n");
         return nullptr;
     }
+};
+
+class LambdaFunctionType : public FunctionType {
+public:
+	shared_ptr<Env> env;
+    shared_ptr<ListType> binds;
+	shared_ptr<ListType> expr;
+
+	LambdaFunctionType(shared_ptr<Env> env, shared_ptr<ListType> binds, shared_ptr<ListType> expr) : FunctionType() {
+		this->env = env;
+		this->binds = binds;
+		this->expr = expr;
+	}
+
+    shared_ptr<Type> eval(Env &ienv, Type* oargs) {
+		trace("FunctionType#eval\n");
+		ListType* args = dynamic_cast<ListType*>(oargs);
+        auto b = binds->data.begin();
+		auto a = args->data.begin();
+		for (;
+				b != binds->data.end();
+				b++, a++) {
+            AtomType* k = dynamic_cast<AtomType*>((*b).get());
+			env->set(k->value, *a);
+		}
+
+		return expr->eval(*env);
+
+	}
+
+};
+
+class FnStarFunctionType : public FunctionType {
+public:
+	Env* env;
+
+	FnStarFunctionType() : FunctionType() { }
+
+	void print() {
+		std::cout << "[#function]";
+	}
+
+    shared_ptr<Type> eval(Env &env, Type* oargs) {
+		shared_ptr<Env> lenv = std::make_shared<Env>(env);
+        ListType* args = dynamic_cast<ListType*>(oargs);
+		shared_ptr<ListType> binds = std::dynamic_pointer_cast<ListType>(args->car());
+		shared_ptr<ListType> expr = std::dynamic_pointer_cast<ListType>(args->cdr()->car());
+
+		return make_shared<LambdaFunctionType>(lenv, binds, expr);
+	}
 };
 
 class PlusFunctionType : public FunctionType {
@@ -213,7 +264,7 @@ public:
 class ConsFunctionType : public FunctionType {
 public:
 	shared_ptr<Type> eval(Env& env, Type* inargs) {
-        ListType* args = dynamic_cast<ListType*>(inargs);
+//        ListType* args = dynamic_cast<ListType*>(inargs);
         shared_ptr<ListType> ret = std::make_shared<ListType>();
 
 		return ret;
@@ -250,7 +301,7 @@ Env::Env() {
     env["+"] = std::make_shared<PlusFunctionType>();
 	env["-"] = std::make_shared<PlusFunctionType>();
 	env["def!"] = std::make_shared<DefFunctionType>();
-	env["fn*"] = std::make_shared<PlusFunctionType>();
+	env["fn*"] = std::make_shared<FnStarFunctionType>();
     // PTDB
 	env["let*"] = std::make_shared<ConsFunctionType>();
 	// TBD
