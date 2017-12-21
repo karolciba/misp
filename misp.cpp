@@ -64,14 +64,26 @@ std::ostream &operator<<(std::ostream &os, unique_ptr<Token> t) {
 	return os << "Token(" << t->type << "," << t->value << ")";
 }
 
-class Env;
+class Type;
 
-class Type {
+class Env : public std::enable_shared_from_this<Env> {
+public:
+	shared_ptr<Env> outer;
+	std::unordered_map<std::string, shared_ptr<Type>> env;
+
+	Env();
+
+	void set(std::string key, shared_ptr<Type> value);
+	shared_ptr<Env>find(std::string key);
+	shared_ptr<Type> get(std::string key);
+};
+
+class Type : public std::enable_shared_from_this<Type> {
 public:
 	virtual void print() {
 		std::cout << "[base]";
 	};
-	virtual unique_ptr<Type> eval(Env &env, Type* args=nullptr) {
+	virtual shared_ptr<Type> eval(Env &env, Type* args=nullptr) {
 		trace("Type#eval\n");
 		return nullptr;
 	}
@@ -82,139 +94,180 @@ public:
 	std::string value;
 	AtomType(std::string v) : value(v) { };
 	void print() {
-		std::cout << "[Atom " << value << "]";
+		std::cout << "" << value << "";
 	}
-	unique_ptr<Type> eval(Env &env, Type *args=nullptr) {
-		trace("AtomType#eval\n");
-		return unique_ptr<Type>(new AtomType(value));
+	shared_ptr<Type> eval(Env &env, Type *args=nullptr) {
+        shared_ptr<Type> env_value = env.get(value);
+		if (env_value) {
+			return env_value;
+		}
+		return std::make_shared<AtomType>(value);
 	}
 	bool operator==(const AtomType& other) {
 		return value == other.value;
 	}
 };
 
-class Env {
+class ConsType : public Type {
 public:
-	shared_ptr<Env> outer;
-	std::unordered_map<std::string, unique_ptr<Type>> env;
-
-	Env();
-
-	void set(std::string key, unique_ptr<Type> value);
-	Env* find(std::string key);
-	Type* get(std::string key);
+	shared_ptr<Type> next;
+	shared_ptr<Type> value;
+	ConsType() {
+		trace("Constructing ConsType\n");
+	}
+    shared_ptr<Type> car() {
+		return value;
+	}
+	shared_ptr<Type> cdr() {
+		return next;
+	}
+	shared_ptr<Type> eval(Env &env, Type* inargs=nullptr) {
+		return shared_from_this();
+	}
 };
 
 class ListType : public Type {
 public:
-	std::deque<unique_ptr<Type>> data;
+	std::deque<shared_ptr<Type>> data;
 	ListType() {
 		trace("Conctruting ListType\n");
 	}
 	void print() {
-		std::cout << "[List ";
+		std::cout << "(";
 		for (auto &i : data) {
 			i->print();
+            std::cout << " ";
 		}
-		std::cout << "]";
+		std::cout << ")";
 	}
-	unique_ptr<Type> eval(Env &env, Type *inargs=nullptr) {
+	shared_ptr<Type> car() {
+		shared_ptr<Type> first = *data.begin();
+        return first;
+	}
+	shared_ptr<ListType> cdr() {
+        auto it = data.begin();
+		it++;
+        shared_ptr<ListType> ret = make_shared<ListType>();
+		for(;it != data.end(); it++) {
+            ret->data.push_back(*it);
+		}
+		return ret;
+	}
+	shared_ptr<Type> eval(Env &env, Type *inargs=nullptr) {
 		trace("ListType#eval\n");
 
 		if (data.size() == 0) {
 			trace("ListType#eval empty list\n");
-			return unique_ptr<Type> (new ListType());
+			return shared_from_this();
 		}
 
-		unique_ptr<Type> op = std::move(*data.begin());
-		// unique_ptr<Type> eop = op->eval();
-		AtomType* aop = dynamic_cast<AtomType*>(op.get());
-		if (!aop) {
-			std::cout << "SYNTAX ERROR" << "\n";
-		}
-		data.pop_front();
-		trace("ListType#eval got operator\n");
+        shared_ptr<Type> op = car();
+        shared_ptr<Type> ev_op = op->eval(env);
 
-		auto args = unique_ptr<ListType>(new ListType());
-		for (auto it = data.begin(); it != data.end(); it++) {
-			args->data.push_back( (*it)->eval(env) );
-		}
+		shared_ptr<Type> args = cdr();
 
-		if (aop->value == "+") {
-			trace("ListType#eval plus operator\n");
-			Type* fn = env.get("+");
-			return fn->eval(env, args.get());
-		} else if (aop->value == "def!") {
-			trace("ListType#eval def operator\n");
-			Type* fn = env.get("def!");
-			return fn->eval(env, args.get());
-		}
+		shared_ptr<Type> ret = ev_op->eval(env, args.get());
+
 		trace("ListType#eval got evaluated params\n");
-
-		return std::move(aop->eval(env, args.get()));
+		return ret;
 	}
 };
 
 class FunctionType : public Type {
 public:
 	Env* env;
+
 	FunctionType() : env() { }
-	unique_ptr<Type> eval(Type* args, Env* env) {
-		trace("FunctionType#eval\n");
-	}
+
+	void print() {
+        std::cout << "[#function]";
+    }
+
+    shared_ptr<Type> eval(Type* args, Env* env) {
+        trace("FunctionType#eval\n");
+        return nullptr;
+    }
 };
 
 class PlusFunctionType : public FunctionType {
 public:
-	PlusFunctionType() : FunctionType() { }
-	unique_ptr<Type> eval(Env &env, Type* oargs) {
-		trace("PlusFunctionType#eval\n");
-		ListType* args = dynamic_cast<ListType*>(oargs);
-		int value = 0;
-		for (auto it = args->data.begin(); it != args->data.end(); it++) {
-			value += std::stoi( (dynamic_cast<AtomType*>((*it).get()))->value);
-		}
-		return unique_ptr<Type>(new AtomType(std::to_string(value)));
+
+    PlusFunctionType() : FunctionType() { }
+
+    void print() {
+        std::cout << "[#+ function]";
+    }
+
+    shared_ptr<Type> eval(Env &env, Type* oargs) {
+        trace("PlusFunctionType#eval\n");
+        ListType* args = dynamic_cast<ListType*>(oargs);
+        int value = 0;
+        for (auto it = args->data.begin(); it != args->data.end(); it++) {
+            AtomType* a = dynamic_cast<AtomType*>((*it).get()->eval(env).get());
+            value += std::stoi( a->value);
+        }
+        return std::make_shared<AtomType>(std::to_string(value));
+	}
+};
+
+class ConsFunctionType : public FunctionType {
+public:
+	shared_ptr<Type> eval(Env& env, Type* inargs) {
+        ListType* args = dynamic_cast<ListType*>(inargs);
+        shared_ptr<ListType> ret = std::make_shared<ListType>();
+
+		return ret;
 	}
 };
 
 class DefFunctionType : public FunctionType {
 public:
 	DefFunctionType() : FunctionType() { }
-	unique_ptr<Type> eval(Env &env, Type* oargs) {
+	void print() {
+		std::cout << "[#def function]";
+	}
+	shared_ptr<Type> eval(Env &env, Type* oargs) {
 		trace("DefFunctionType#eval\n");
 		ListType* args = dynamic_cast<ListType*>(oargs);
 
-		unique_ptr<Type> oname = std::move(*args->data.begin());
+		shared_ptr<Type> oname = *args->data.begin();
 		// unique_ptr<Type> eop = op->eval();
-		AtomType* name = dynamic_cast<AtomType*>(oname.release());
+		AtomType* name = dynamic_cast<AtomType*>(oname.get());
 		if (!name) {
 			std::cout << "SYNTAX ERROR" << "\n";
 		}
 		args->data.pop_front();
 
-		unique_ptr<Type> value = args->eval(env);
+		AtomType* value = (AtomType*)args->eval(env).get();
 
-		env.set(name->value, std::move(unique_ptr<AtomType>(name)));
+		env.set(name->value, std::make_shared<AtomType>(value->value));
 
-		return unique_ptr<Type>(std::move(value));
+		return std::make_shared<AtomType>(value->value);
 	}
 };
 
 Env::Env() {
-    env["+"] = std::move(std::make_unique<PlusFunctionType>());
-	env["-"] = std::move(std::make_unique<PlusFunctionType>());
-	env["def!"] = std::move(std::make_unique<DefFunctionType>());
+    env["+"] = std::make_shared<PlusFunctionType>();
+	env["-"] = std::make_shared<PlusFunctionType>();
+	env["def!"] = std::make_shared<DefFunctionType>();
+	env["fn*"] = std::make_shared<PlusFunctionType>();
+    // PTDB
+	env["let*"] = std::make_shared<ConsFunctionType>();
+	// TBD
+    env["cons"] = std::make_shared<ConsFunctionType>();
+	env["car"] = std::make_shared<PlusFunctionType>();
+	env["cdr"] = std::make_shared<PlusFunctionType>();
+	env["cond"] = std::make_shared<PlusFunctionType>();
 }
 
-void Env::set(std::string key, unique_ptr<Type> value) {
-	env[key] = std::move(value);
+void Env::set(std::string key, shared_ptr<Type> value) {
+	env[key] = value;
 }
 
-Env* Env::find(std::string key) {
+shared_ptr<Env> Env::find(std::string key) {
 	auto it = env.find(key);
 	if (it != env.end()) {
-		return this;
+		return shared_from_this();
 	} else if (outer) {
 		return outer->find(key);
 	}
@@ -222,17 +275,17 @@ Env* Env::find(std::string key) {
 	return nullptr;
 }
 
-Type* Env::get(std::string key) {
+shared_ptr<Type> Env::get(std::string key) {
 	auto it = env.find(key);
 	if (it != env.end()) {
-		return it->second.get();
+		return it->second;
 	} else {
 		return nullptr;
 	}
 }
 
 class Reader {
-	unique_ptr<Token> previous;
+	shared_ptr<Token> previous;
 
 	bool is_space(char c) {
 		return c == ' ' or c == '\t';
@@ -248,9 +301,11 @@ class Reader {
 
 public:
 	Reader() : previous(nullptr) {};
-	unique_ptr<Token> get_token() {
+	shared_ptr<Token> get_token() {
 		if (previous) {
-			return std::move(previous);
+            auto cpy = previous;
+            previous = nullptr;
+			return cpy;
 		}
 
 		char c;
@@ -260,15 +315,14 @@ public:
 		} while (!std::cin.eof() && is_space(c));
 
 		if (std::cin.eof()) {
-			return unique_ptr<Token>(new Token(Tokens::Eol));
+			return shared_ptr<Token>(new Token(Tokens::Eol));
 		}
 		if (is_newline(c)) {
-			return unique_ptr<Token>(new Token(Tokens::NewLine));
-		}
-		else if (c == '(') {
-			return unique_ptr<Token>(new Token(Tokens::LeftParen));
+			return shared_ptr<Token>(new Token(Tokens::NewLine));
+		} else if (c == '(') {
+			return shared_ptr<Token>(new Token(Tokens::LeftParen));
 		} else if (c == ')') {
-			return unique_ptr<Token>(new Token(Tokens::RightParen));
+			return shared_ptr<Token>(new Token(Tokens::RightParen));
 		} else {
 			Token* t = new Token(Tokens::Atom);
 			while (!std::cin.eof() && !is_newline(c) && !is_space(c) && !is_paren(c)) {
@@ -276,15 +330,15 @@ public:
 				c = std::cin.get();
 			}
 			std::cin.putback(c);
-			return unique_ptr<Token>(t);
+			return shared_ptr<Token>(t);
 		}
 	}
 
-	void put_back(unique_ptr<Token> t) {
-		previous = std::move(t);
+	void put_back(shared_ptr<Token> t) {
+		previous = t;
 	}
 
-	unique_ptr<Token>& peek() {
+	shared_ptr<Token>& peek() {
 		if (previous) {
 			return previous;
 		}
@@ -292,7 +346,7 @@ public:
 		return previous;
 	}
 
-	unique_ptr<Type> read_form() {
+	shared_ptr<Type> read_form() {
 		auto& p = peek();
 		trace("read_form peek: " << &p << "\n");
 		switch (p->type) {
@@ -304,7 +358,6 @@ public:
 				// consume left parent token
 				get_token();
 				return read_list();
-				break;
 			case Tokens::NewLine:
 				get_token();
 				trace("read_form found: NewLine\n");
@@ -317,10 +370,10 @@ public:
 				throw std::runtime_error("Syntax error");
 		}
 	}
-	unique_ptr<ListType> read_list() {
-		//auto l = unique_ptr<ListType>(new ListType());
+	shared_ptr<ListType> read_list() {
+		//auto l = shared_ptr<ListType>(new ListType());
 		//investigate
-		auto l = std::make_unique<ListType>();
+		auto l = std::make_shared<ListType>();
 		while (true) {
 			auto& p = peek();
 			trace("read_list peek: " << &p << "\n");
@@ -332,15 +385,15 @@ public:
 					break;
 				default:
 					trace("read_list reading atom " << &p << "\n");
-					auto tp = unique_ptr<Type>(read_form());
-					l->data.push_back(std::move(tp));
+					auto tp = shared_ptr<Type>(read_form());
+					l->data.push_back(tp);
 			}
 		}
 	}
-	unique_ptr<AtomType> read_atom() {
+	shared_ptr<AtomType> read_atom() {
 		auto t = get_token();
 		trace("read_atom token: " << &t << "\n");
-		return unique_ptr<AtomType>(new AtomType(t->value));
+		return shared_ptr<AtomType>(new AtomType(t->value));
 	}
 };
 
@@ -371,8 +424,8 @@ int main(int argc, char** argv) {
 		auto t = reader.read_form();
 		if (t) {
 			trace("Print ast\n");
-			t->print();
-			std::cout << "\n";
+			// t->print();
+			// std::cout << "\n";
 			trace("Eval ast\n");
 			auto ret = t->eval(*env);
 			ret->print();
