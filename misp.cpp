@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <memory>
 #include <string>
+#include <sstream>
 
 using std::unique_ptr;
 using std::shared_ptr;
@@ -13,7 +14,7 @@ using std::weak_ptr;
 using std::make_shared;
 
 int LEVEL = 5;
-// int LEVEL = 0;
+//int LEVEL = 0;
 int ERROR = 1;
 int WARN  = 2;
 int INFO  = 3;
@@ -75,6 +76,7 @@ public:
     Env(Env* iouter) : outer(iouter) { };
 
 	void set(std::string key, shared_ptr<Type> value);
+    std::string repr();
 	shared_ptr<Env>find(std::string key);
 	shared_ptr<Type> get(std::string key);
 };
@@ -82,10 +84,15 @@ public:
 class Type : public std::enable_shared_from_this<Type> {
 public:
 	virtual void print() {
-		std::cout << "[base]";
+		std::cout << repr();
+	};
+    virtual std::string repr() {
+		std::ostringstream os;
+		os << "[ERROR base type]";
+		return os.str();
 	};
 	virtual shared_ptr<Type> eval(Env &env, Type* args=nullptr) {
-		trace("Type#eval\n");
+		trace("[ERROR] Type#eval\n");
 		return nullptr;
 	}
 };
@@ -94,14 +101,18 @@ class AtomType : public Type {
 public:
 	std::string value;
 	AtomType(std::string v) : value(v) { };
-	void print() {
-		std::cout << "" << value << "";
-	}
+	std::string repr() {
+		std::ostringstream os;
+		os << "" << value << "";
+		return os.str();
+	};
 	shared_ptr<Type> eval(Env &env, Type *args=nullptr) {
         shared_ptr<Type> env_value = env.get(value);
 		if (env_value) {
+			trace("AtomType#eval [" << repr() << ": " << env_value->repr() << "] " << env.repr() << "\n");
 			return env_value;
 		}
+            trace("AtomType#eval [" << repr() << "] " << env.repr() << "\n");
 		return std::make_shared<AtomType>(value);
 	}
 	bool operator==(const AtomType& other) {
@@ -116,6 +127,11 @@ public:
 	ConsType() {
 		trace("Constructing ConsType\n");
 	}
+	std::string repr() {
+		std::ostringstream os;
+		os << "(" << next->repr() << " " << value->repr() << ")";
+		return os.str();
+	};
     shared_ptr<Type> car() {
 		return value;
 	}
@@ -129,33 +145,58 @@ public:
 
 class ListType : public Type {
 public:
+
 	std::deque<shared_ptr<Type>> data;
 	ListType() {
-		trace("Conctruting ListType\n");
+		trace("Constructing ListType\n");
 	}
-	void print() {
-		std::cout << "(";
+
+	std::string repr() {
+		std::ostringstream os;
+		os << "(";
 		for (auto &i : data) {
-			i->print();
-            std::cout << " ";
+			os << i->repr();
+			os << " ";
 		}
-		std::cout << ")";
-	}
+		os << ")";
+		return os.str();
+	};
+
 	shared_ptr<Type> car() {
-		shared_ptr<Type> first = *data.begin();
+		auto it = data.begin();
+		if (it == data.end()) {
+			return nullptr;
+		}
+		shared_ptr<Type> first = *it;
         return first;
 	}
+
 	shared_ptr<ListType> cdr() {
+		// skip first
         auto it = data.begin();
+		if (it == data.end()) {
+			return nullptr;
+		}
 		it++;
+		if (it == data.end()) {
+			return nullptr;
+		}
+
+		// create list from the rest
         shared_ptr<ListType> ret = make_shared<ListType>();
 		for(;it != data.end(); it++) {
             ret->data.push_back(*it);
 		}
 		return ret;
 	}
+
 	shared_ptr<Type> eval(Env &env, Type *inargs=nullptr) {
-		trace("ListType#eval\n");
+		unique_ptr<ListType> empty_inargs;
+		if (!inargs) {
+			empty_inargs = std::make_unique<ListType>();
+			inargs = empty_inargs.get();
+		}
+		trace("ListType#eval [" << repr() << ": " << inargs->repr() << "] " << env.repr() << "\n");
 
 		if (data.size() == 0) {
 			trace("ListType#eval empty list\n");
@@ -169,6 +210,23 @@ public:
 
 		shared_ptr<Type> ret = ev_op->eval(env, args.get());
 
+		trace("ListType#eval return: " << ret->repr() << "\n");
+		return ret;
+	}
+
+	shared_ptr<Type> eval_args(Env &env, Type *inargs=nullptr) {
+		trace("ListType#eval\n");
+
+		if (data.size() == 0) {
+			trace("ListType#eval empty list\n");
+			return shared_from_this();
+		}
+		shared_ptr<ListType> ret = make_shared<ListType>();
+
+        for (auto it = data.begin(); it != data.end(); it++) {
+			ret->data.push_back((*it)->eval(env));
+		}
+
 		trace("ListType#eval got evaluated params\n");
 		return ret;
 	}
@@ -180,9 +238,11 @@ public:
 
 	FunctionType() : env() { }
 
-	void print() {
-        std::cout << "[#function]";
-    }
+	std::string repr() {
+		std::ostringstream os;
+        os << "(#function)";
+		return os.str();
+	};
 
     shared_ptr<Type> eval(Env &env, Type* oargs) {
         trace("FunctionType#eval\n");
@@ -202,6 +262,12 @@ public:
 		this->expr = expr;
 	}
 
+	std::string repr() {
+		std::ostringstream os;
+		os << "(#lambda " << binds->repr() << " " << expr->repr() << ")";
+		return os.str();
+	};
+
     shared_ptr<Type> eval(Env &ienv, Type* oargs) {
 		trace("FunctionType#eval\n");
 		ListType* args = dynamic_cast<ListType*>(oargs);
@@ -211,7 +277,7 @@ public:
 				b != binds->data.end();
 				b++, a++) {
             AtomType* k = dynamic_cast<AtomType*>((*b).get());
-			env->set(k->value, *a);
+			env->set(k->value, (*a)->eval(*env));
 		}
 
 		return expr->eval(*env);
@@ -226,11 +292,14 @@ public:
 
 	FnStarFunctionType() : FunctionType() { }
 
-	void print() {
-		std::cout << "[#function]";
-	}
+	std::string repr() {
+		std::ostringstream os;
+		os << "(#fn*)";
+		return os.str();
+	};
 
     shared_ptr<Type> eval(Env &env, Type* oargs) {
+		trace("FnStarType#eval [" << repr() << ": " << oargs->repr() << "] " << env.repr() << "\n");
 		shared_ptr<Env> lenv = std::make_shared<Env>(env);
         ListType* args = dynamic_cast<ListType*>(oargs);
 		shared_ptr<ListType> binds = std::dynamic_pointer_cast<ListType>(args->car());
@@ -245,12 +314,14 @@ public:
 
     PlusFunctionType() : FunctionType() { }
 
-    void print() {
-        std::cout << "[#+ function]";
-    }
+	std::string repr() {
+		std::ostringstream os;
+		os << "(#+)";
+		return os.str();
+	};
 
     shared_ptr<Type> eval(Env &env, Type* oargs) {
-        trace("PlusFunctionType#eval\n");
+		trace("PlusFunctionType#eval [" << repr() << ": " << oargs->repr() << "] " << env.repr() << "\n");
         ListType* args = dynamic_cast<ListType*>(oargs);
         int value = 0;
         for (auto it = args->data.begin(); it != args->data.end(); it++) {
@@ -274,45 +345,64 @@ public:
 class DefFunctionType : public FunctionType {
 public:
 	DefFunctionType() : FunctionType() { }
-	void print() {
-		std::cout << "[#def function]";
-	}
+	std::string repr() {
+		std::ostringstream os;
+		os << "(#def!)";
+		return os.str();
+	};
 	shared_ptr<Type> eval(Env &env, Type* oargs) {
-		trace("DefFunctionType#eval\n");
+		trace("DefFunctionType#eval [" << repr() << ": " << oargs->repr() << "] " << env.repr() << "\n");
 		ListType* args = dynamic_cast<ListType*>(oargs);
 
-		shared_ptr<Type> oname = *args->data.begin();
-		// unique_ptr<Type> eop = op->eval();
-		AtomType* name = dynamic_cast<AtomType*>(oname.get());
-		if (!name) {
-			std::cout << "SYNTAX ERROR" << "\n";
+		// Evaluate name
+		// either it is atom already - then take it as it is, otherwise
+		// evaluate it first
+		shared_ptr<Type> name_arg = args->car();
+		trace("DefFunctionType#evaluating name " << name_arg->repr() << "\n");
+		if (!std::dynamic_pointer_cast<AtomType>(name_arg)) {
+			name_arg = name_arg->eval(env);
 		}
-		args->data.pop_front();
+		shared_ptr<AtomType> name = std::dynamic_pointer_cast<AtomType>(name_arg);
+		trace("DefFunctionType#evaluated name " << name->repr() << "\n");
 
-		AtomType* value = (AtomType*)args->eval(env).get();
+		// Evaluate value
+		trace("DefFunctionType#evaluating value\n");
+        shared_ptr<Type> value = args->cdr()->eval_args(env);
+		trace("DefFunctionType#evaluated value" << value->repr() << "\n");
 
-		env.set(name->value, std::make_shared<AtomType>(value->value));
+		env.set(name->value, value);
 
-		return std::make_shared<AtomType>(value->value);
+		return value;
 	}
 };
 
 Env::Env() {
-    env["+"] = std::make_shared<PlusFunctionType>();
-	env["-"] = std::make_shared<PlusFunctionType>();
+	env["+"] = std::make_shared<PlusFunctionType>();
 	env["def!"] = std::make_shared<DefFunctionType>();
 	env["fn*"] = std::make_shared<FnStarFunctionType>();
     // PTDB
-	env["let*"] = std::make_shared<ConsFunctionType>();
+	//env["let*"] = std::make_shared<ConsFunctionType>();
 	// TBD
-    env["cons"] = std::make_shared<ConsFunctionType>();
-	env["car"] = std::make_shared<PlusFunctionType>();
-	env["cdr"] = std::make_shared<PlusFunctionType>();
-	env["cond"] = std::make_shared<PlusFunctionType>();
+    //env["cons"] = std::make_shared<FunctionType>();
+	//env["car"] = std::make_shared<FunctionType>();
+	//env["cdr"] = std::make_shared<FunctionType>();
+	//env["cond"] = std::make_shared<FunctionType>();
 }
 
 void Env::set(std::string key, shared_ptr<Type> value) {
 	env[key] = value;
+}
+
+std::string Env::repr() {
+	std::ostringstream os;
+	os << "{";
+	for (auto &it : env) {
+		os << "\"" << (it).first;
+		os << "\": " << ((it).second)->repr();
+		os << ", ";
+	}
+	os << "}";
+	return os.str();
 }
 
 shared_ptr<Env> Env::find(std::string key) {
