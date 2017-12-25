@@ -14,8 +14,8 @@ using std::shared_ptr;
 using std::weak_ptr;
 using std::make_shared;
 
-int LEVEL = 5;
-//int LEVEL = 0;
+//int LEVEL = 5;
+int LEVEL = 0;
 int ERROR = 1;
 int WARN  = 2;
 int INFO  = 3;
@@ -286,7 +286,11 @@ public:
 		return os.str();
 	};
 
-	shared_ptr<Type> eval(shared_ptr<Env> ienv, Type *oargs) {
+	shared_ptr<Type> eval(shared_ptr<Env> ienv, Type *oargs = nullptr) {
+        unique_ptr<Type> null_args = std::make_unique<ListType>();
+		if (!oargs) {
+            oargs = null_args.get();
+		}
 		trace("LambdaType#eval [" << repr() << ": " << oargs->repr() << "] " << ienv->repr() << "\n");
         ListType* args = dynamic_cast<ListType*>(oargs);
 

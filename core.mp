@@ -1,11 +1,10 @@
 ; core
 ; boolean logic
+; empty list evaluates to false/nil
 (def! nil ())
 (def! false ())
-; error on evaluation
-; (def! true (fn* () (true)))
-; TODO: fix temp definition for true
-(def! true 1)
+; true if everything else, it lambda returning itself
+(def! true (fn* () true))
 (def! neg
       (fn* (var)
            (cond?
