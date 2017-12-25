@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <typeinfo>
 #include <vector>
 #include <deque>
@@ -13,8 +14,8 @@ using std::shared_ptr;
 using std::weak_ptr;
 using std::make_shared;
 
-//int LEVEL = 5;
-int LEVEL = 0;
+int LEVEL = 5;
+//int LEVEL = 0;
 int ERROR = 1;
 int WARN  = 2;
 int INFO  = 3;
@@ -276,11 +277,12 @@ public:
 	shared_ptr<Env> env;
 	shared_ptr<ListType> binds;
 	shared_ptr<Type> expr;
-	LambdaType(shared_ptr<Env> ienv, shared_ptr<ListType> ibinds, shared_ptr<Type> iexpr): env(ienv), binds(ibinds), expr(iexpr) { }
+	LambdaType(shared_ptr<Env> env, shared_ptr<ListType> binds, shared_ptr<Type> expr): env(env), binds(binds), expr(expr) { }
 
 	std::string repr() {
 		std::ostringstream os;
-		os << "(#lambda " << binds->repr() << " " << expr->repr() << " " << env->repr() << ")";
+		//os << "(#lambda " << binds->repr() << " " << expr->repr() << " " << env->repr() << ")";
+		os << "(#lambda " << binds->repr() << " " << expr->repr()  << ")";
 		return os.str();
 	};
 
@@ -289,6 +291,9 @@ public:
         ListType* args = dynamic_cast<ListType*>(oargs);
 		auto bit = binds->data.begin();
         auto ait = args->data.begin();
+
+		shared_ptr<Env> env = make_shared<Env>(ienv);
+
 		for (;bit != binds->data.end(); bit++, ait++) {
 			shared_ptr<AtomType> key = std::dynamic_pointer_cast<AtomType>(*bit);
 			env->set(key->value, *ait);
@@ -310,9 +315,9 @@ public:
         shared_ptr<ListType> binds = std::dynamic_pointer_cast<ListType>(args->car());
 		shared_ptr<Type> expr = args->cdr()->car();
 
-		shared_ptr<Env> lenv = make_shared<Env>(env);
+		//shared_ptr<Env> lenv = make_shared<Env>(env);
 
-		shared_ptr<LambdaType> ret = make_shared<LambdaType>(std::move(lenv), std::move(binds), std::move(expr));
+		shared_ptr<LambdaType> ret = make_shared<LambdaType>(env, std::move(binds), std::move(expr));
 
 		return ret;
 	}
@@ -375,10 +380,10 @@ public:
 				break;
 			}
 			trace("CondFunctionType#tested true\n");
-			last = el->cdr()->eval(env);
+			last = el->cdr(); //->eval(env);
 		}
 
-		return last;
+		return last->eval(env);
 	}
 };
 Env::Env() {
@@ -443,7 +448,9 @@ shared_ptr<Type> Env::get(std::string key) {
 }
 
 class Reader {
+	std::istream& source;
 	shared_ptr<Token> previous;
+    int balance = 0;
 
 	bool is_space(char c) {
 		return c == ' ' or c == '\t';
@@ -458,7 +465,7 @@ class Reader {
 	}
 
 public:
-	Reader() : previous(nullptr) {};
+	Reader(std::istream &source = std::cin) : source(source), previous(nullptr) {};
 	shared_ptr<Token> get_token() {
 		if (previous) {
             auto cpy = previous;
@@ -469,25 +476,29 @@ public:
 		char c;
 
 		do {
-			c = std::cin.get();
-		} while (!std::cin.eof() && is_space(c));
+			c = source.get();
+		} while (!source.eof() && is_space(c));
 
-		if (std::cin.eof()) {
+		if (source.eof()) {
 			return shared_ptr<Token>(new Token(Tokens::Eol));
 		}
 		if (is_newline(c)) {
 			return shared_ptr<Token>(new Token(Tokens::NewLine));
 		} else if (c == '(') {
-			return shared_ptr<Token>(new Token(Tokens::LeftParen));
+			balance++;
+            return shared_ptr<Token>(new Token(Tokens::LeftParen));
+        } else if (c == ';') {
+            return shared_ptr<Token>(new Token(Tokens::Comment));
 		} else if (c == ')') {
+			balance--;
 			return shared_ptr<Token>(new Token(Tokens::RightParen));
 		} else {
 			Token* t = new Token(Tokens::Atom);
-			while (!std::cin.eof() && !is_newline(c) && !is_space(c) && !is_paren(c)) {
+			while (!source.eof() && !is_newline(c) && !is_space(c) && !is_paren(c)) {
 				t->value += c;
-				c = std::cin.get();
+				c = source.get();
 			}
-			std::cin.putback(c);
+			source.putback(c);
 			return shared_ptr<Token>(t);
 		}
 	}
@@ -505,6 +516,10 @@ public:
 	}
 
 	shared_ptr<Type> read_form() {
+		if (source.eof()) {
+			return nullptr;
+		}
+
 		auto& p = peek();
 		trace("read_form peek: " << &p << "\n");
 		switch (p->type) {
@@ -531,9 +546,14 @@ public:
 				throw std::runtime_error("Syntax error");
 		}
 	}
+
+    /**
+     * Consumes comment till end of line
+     */
     void get_comment() {
-        while(get_token()->type != Tokens::Eol);
+        while(get_token()->type != Tokens::NewLine);
 	}
+
 	shared_ptr<ListType> read_list() {
 		//auto l = shared_ptr<ListType>(new ListType());
 		//investigate
@@ -547,6 +567,11 @@ public:
 					trace("read_list found closing paren: " << &p << "\n");
 					return l;
 					break;
+				case Tokens::NewLine:
+                    if (balance) {
+						get_token();
+						break;
+					}
 				default:
 					trace("read_list reading atom " << &p << "\n");
 					auto tp = shared_ptr<Type>(read_form());
@@ -581,8 +606,30 @@ public:
 };
 
 int main(int argc, char** argv) {
-	Reader reader;
 	shared_ptr<Env> env = std::make_shared<Env>();
+
+    // Initialize self extenstions from core file
+	std::ifstream core;
+	core.open("core.mp");
+
+    if (core.is_open()) {
+		Reader core_reader(core);
+		while (!core.eof()) {
+			auto t = core_reader.read_form();
+			if (t) {
+				trace("Print ast\n");
+				t->print();
+				std::cout << "\n";
+				trace("Eval ast\n");
+				auto ret = t->eval(env);
+				ret->print();
+				std::cout << "\n";
+				std::cout << "user> ";
+			}
+		}
+	}
+
+	Reader reader;
 	std::cout << "user> ";
 	do {
 		auto t = reader.read_form();
