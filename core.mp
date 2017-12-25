@@ -50,9 +50,14 @@
       )
 )
 
-(def! z (cons 1 2))
-(car z)
-(cdr z)
-(def! y (cons 3 z))
-(car y)
-(cdr y)
+(def! inc
+      (fn* (x)
+           (cons true x)
+      )
+)
+
+(def! dec
+      (fn* (x)
+           (cdr x)
+      )
+)

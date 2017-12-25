@@ -1,5 +1,5 @@
 # MISP
-MIcro liSP (or Mosty Inefective liSP) exercise implementation in C++ 
+MIcro liSP (or Mosty Impractical liSP) exercise implementation in C++ 
 aimed at achieving bare minimal Lisp support as exercise both in C++ and Lisp.
 
 Goal is to obtain bare minimum primitives(axioms) required to boostrap allowing rest of the
@@ -38,3 +38,5 @@ Current list of primitives:
    Anything from semicolon (;) till end of the line will be treated as comment.
 
 For examples see core.mp file, which contains bootstrapped language definition.
+
+Available online on [Misp on Repl.it](https://repl.it/@karolciba/MostlyImpracticalLisp).

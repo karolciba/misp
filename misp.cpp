@@ -391,18 +391,12 @@ public:
 		return last->eval(env);
 	}
 };
+
 Env::Env() {
 	env["+"] = std::make_shared<PlusFunctionType>();
 	env["def!"] = std::make_shared<DefFunctionType>();
 	env["fn*"] = std::make_shared<FnFunctionType>();
     env["cond?"] = std::make_shared<CondFunctionType>();
-    // PTDB
-	//env["let*"] = std::make_shared<ConsFunctionType>();
-	// TBD
-    //env["cons"] = std::make_shared<FunctionType>();
-	//env["car"] = std::make_shared<FunctionType>();
-	//env["cdr"] = std::make_shared<FunctionType>();
-	//env["cond"] = std::make_shared<FunctionType>();
 }
 
 void Env::set(std::string key, shared_ptr<Type> value) {
