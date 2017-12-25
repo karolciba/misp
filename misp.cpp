@@ -289,16 +289,17 @@ public:
 	shared_ptr<Type> eval(shared_ptr<Env> ienv, Type *oargs) {
 		trace("LambdaType#eval [" << repr() << ": " << oargs->repr() << "] " << ienv->repr() << "\n");
         ListType* args = dynamic_cast<ListType*>(oargs);
-		shared_ptr<Env> env = make_shared<Env>(ienv);
+
+		shared_ptr<Env> new_env = make_shared<Env>(env);
 
 		auto bit = binds->data.begin();
         auto ait = args->data.begin();
 		for (;bit != binds->data.end(); bit++, ait++) {
 			shared_ptr<AtomType> key = std::dynamic_pointer_cast<AtomType>(*bit);
-			env->set(key->value, (*ait)->eval(env));
+			new_env->set(key->value, (*ait)->eval(ienv));
 		}
 
-		shared_ptr<Type> ret = expr->eval(env);
+		shared_ptr<Type> ret = expr->eval(new_env);
 
 		return std::move(ret);
 	}
@@ -348,6 +349,7 @@ public:
 		// Evaluate value
 		trace("DefFunctionType#evaluating value\n");
 		shared_ptr<Type> value = args->cdr()->car()->eval(env);
+
 		trace("DefFunctionType#evaluated value" << value->repr() << "\n");
 
 		env->set(name->value, value);

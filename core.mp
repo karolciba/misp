@@ -14,18 +14,46 @@
            )
       )
 )
-;(def! if (fn* (var true_clause false_clause)
-;              (cond?
-;                    (var true_clause)
-;                    ((neg var) false_clause)
-;              )))
+(def! if
+      (fn* (var true_clause false_clause)
+           (cond?
+                 (true false_clause)
+                 (var true_clause)
+           )
+      )
+)
 
 ; placeholders for inc and dec
 ; till numeric support will be raplaced
 ; by list concatenation
 (def! inc (fn* (x) (+ x 1)))
 
-; cons, car and cdr endcoding in lambda
-(def! cons (fn* (x y) (fn* (m) (m x y))))
-:(def! car (fn* (z) (fn* (p q) (p))))
-;(def! cdr (fn* (z) (fn* (p q) (q))))
+; cons, car and cdr encoding in lambda
+; Church encoding see Wikipedia:
+; https://en.wikipedia.org/wiki/Cons#Functional_Implementation
+(def! cons
+      (fn* (x y)
+           (fn* (m)
+                (m x y)
+           )
+      )
+)
+
+(def! car
+      (fn* (z)
+           (z (fn* (p q) p))
+      )
+)
+
+(def! cdr
+      (fn* (z)
+           (z (fn* (p q) q))
+      )
+)
+
+(def! z (cons 1 2))
+(car z)
+(cdr z)
+(def! y (cons 3 z))
+(car y)
+(cdr y)
