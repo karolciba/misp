@@ -40,3 +40,10 @@ Current list of primitives:
 For examples see core.mp file, which contains bootstrapped language definition.
 
 Available online on [Misp on Repl.it](https://repl.it/@karolciba/MostlyImpracticalLisp).
+
+TODO List:
+* Refactor, trim redundant code
+* Replace List with Lambda closure cons
+* eq? operator for Atom comparison (required to build objects)
+* syntactic sugar for numeric types
+

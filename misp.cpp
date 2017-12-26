@@ -14,24 +14,31 @@ using std::shared_ptr;
 using std::weak_ptr;
 using std::make_shared;
 
-//int LEVEL = 5;
-int LEVEL = 0;
-int ERROR = 1;
-int WARN  = 2;
-int INFO  = 3;
-int TRACE = 4;
+// Logging level
+int LEVEL = 5;
+//int LEVEL = 0;
 
-#define trace(msg) (LEVEL >= TRACE && std::cerr << msg)
+// Available levels
+int DEBUG = 1;
+int ERROR = 2;
+int WARN  = 3;
+int INFO  = 4;
+int TRACE = 5;
+
+#define error(msg) (LEVEL >= ERROR && std::cerr << msg)
+#define warn(msg) (LEVEL >= WARN && std::cerr << msg)
 #define info(msg) (LEVEL >= INFO && std::cerr << msg)
+#define debug(msg) (LEVEL >= DEBUG && std::cerr << msg)
+#define trace(msg) (LEVEL >= TRACE && std::cerr << msg)
 
 
 enum Tokens {
-	Eol,
-    Comment,
-	LeftParen,
-	RightParen,
-	Atom,
-	NewLine,
+	Eol = '0',
+    Comment = ';',
+	LeftParen = '(',
+	RightParen = ')',
+	Atom = 'a',
+	NewLine = '\n',
 };
 
 class Token {
@@ -39,36 +46,13 @@ public:
 	Tokens type;
 	std::string value;
 
-	Token(Tokens t, std::string v = "") : type(t), value(v) {
-		switch (t) {
-			case Tokens::LeftParen:
-				value = "(";
-				break;
-			case Tokens::RightParen:
-				value = ")";
-				break;
-			case Tokens::Comment:
-				value = ";";
-				break;
-			default:
-				break;
-		}
-		trace("Constr on Token(" << t << ", \"" << value << "\")\n");
-	};
-	~Token() {
-		trace("Destr on Token(" << type << ", \"" << value << "\")\n");
-	}
-	void print() {
-		trace("Token(" << type << ", \"" << value << "\")\n");
+	Token(Tokens t, std::string v = "") : type(t), value(v) { }
+
+	friend std::ostream &operator<<(std::ostream &os, const Token *t) {
+		return os << "Token(" << t->type << "," << t->value << ")";
 	}
 };
 
-std::ostream &operator<<(std::ostream &os, Token* const &t) { 
-	return os << "Token(" << t->type << "," << t->value << ")";
-}
-std::ostream &operator<<(std::ostream &os, unique_ptr<Token> t) { 
-	return os << "Token(" << t->type << "," << t->value << ")";
-}
 
 class Type;
 
@@ -98,7 +82,7 @@ public:
 	};
 	virtual shared_ptr<Type> eval(shared_ptr<Env> env, Type *args = nullptr) {
 		trace("[ERROR] Type#eval\n");
-		return nullptr;
+        return env->get("nil");
 	}
 };
 
@@ -130,11 +114,7 @@ public:
 
 class ListType : public Type {
 public:
-
 	std::deque<shared_ptr<Type>> data;
-	ListType() {
-		trace("Constructing ListType\n");
-	}
 
 	std::string repr() {
 		std::ostringstream os;
@@ -179,28 +159,6 @@ public:
 		return data.empty();
 	}
 
-	shared_ptr<Type> eval_args(shared_ptr<Env> env, Type *inargs=nullptr) {
-		unique_ptr<ListType> empty_inargs;
-		if (!inargs) {
-			empty_inargs = std::make_unique<ListType>();
-			inargs = empty_inargs.get();
-		}
-		trace("ListType#eval_args [" << repr() << ": " << inargs->repr() << "] " << env->repr() << "\n");
-
-		if (data.size() == 0) {
-			trace("ListType#eval empty list\n");
-			return shared_from_this();
-		}
-		shared_ptr<ListType> ret = make_shared<ListType>();
-
-		for (auto it = data.begin(); it != data.end(); it++) {
-			ret->data.push_back((*it)->eval(env));
-		}
-
-		trace("ListType#eval got evaluated params\n");
-		return ret;
-	}
-
 	shared_ptr<Type> eval(shared_ptr<Env> env, Type *inargs = nullptr) {
 		unique_ptr<ListType> empty_inargs;
 		if (!inargs) {
@@ -224,55 +182,7 @@ public:
 	}
 };
 
-class FunctionType : public Type {
-public:
-	Env* env;
-
-	FunctionType() : env() { }
-
-	std::string repr() {
-		std::ostringstream os;
-		os << "(#function)";
-		return os.str();
-	};
-
-	shared_ptr<Type> eval(shared_ptr<Env> env, Type *oargs) {
-		trace("FunctionType#eval\n");
-		return make_shared<ListType>();
-	}
-};
-
-class PlusFunctionType : public FunctionType {
-public:
-
-	PlusFunctionType() : FunctionType() { }
-
-	std::string repr() {
-		std::ostringstream os;
-		os << "(#+)";
-		return os.str();
-	};
-
-	shared_ptr<Type> eval(shared_ptr<Env> env, Type *oargs) {
-		trace("PlusFunctionType#eval [" << repr() << ": " << oargs->repr() << "] " << env->repr() << "\n");
-		ListType* args = dynamic_cast<ListType*>(oargs);
-		shared_ptr<ListType> ev_args = std::dynamic_pointer_cast<ListType>(args->eval_args(env));
-		trace("PlusFunctionType#evalated args " << oargs->repr() << "\n");
-		int value = 0;
-		for (auto it = args->data.begin(); it != args->data.end(); it++) {
-			//AtomType* at = dynamic_cast<AtomType*>((*it).get());
-			shared_ptr<Type> t = *it;
-			//shared_ptr<AtomType> at = std::dynamic_pointer_cast<AtomType>(t);
-			shared_ptr<AtomType> eat = std::dynamic_pointer_cast<AtomType>(t->eval(env));
-			trace("PlusFunctionType#arg " << eat->repr() << "\n");
-			value += std::stoi(eat->value);
-		}
-        trace("PlusFunctionType#ret " << value << "\n");
-		return std::make_shared<AtomType>(std::to_string(value));
-	}
-};
-
-class LambdaType : public FunctionType {
+class LambdaType : public Type {
 public:
 	shared_ptr<Env> env;
 	shared_ptr<ListType> binds;
@@ -309,17 +219,18 @@ public:
 	}
 };
 
-class FnFunctionType : public FunctionType {
+class FnFunctionType : public Type {
 public:
-	FnFunctionType() : FunctionType() { }
-
+	std::string repr() {
+		std::ostringstream os;
+		os << "(#fn*) ";
+		return os.str();
+	};
 	shared_ptr<Type> eval(shared_ptr<Env> env, Type *oargs) {
 		trace("DefFunctionType#eval [" << repr() << ": " << oargs->repr() << "] " << env->repr() << "\n");
 		ListType* args = dynamic_cast<ListType*>(oargs);
         shared_ptr<ListType> binds = std::dynamic_pointer_cast<ListType>(args->car());
 		shared_ptr<Type> expr = args->cdr()->car();
-
-		//shared_ptr<Env> lenv = make_shared<Env>(env);
 
 		shared_ptr<LambdaType> ret = make_shared<LambdaType>(env, std::move(binds), std::move(expr));
 
@@ -327,9 +238,8 @@ public:
 	}
 };
 
-class DefFunctionType : public FunctionType {
+class DefFunctionType : public Type {
 public:
-	DefFunctionType() : FunctionType() { }
 	std::string repr() {
 		std::ostringstream os;
 		os << "(#def!)";
@@ -362,9 +272,8 @@ public:
 	}
 };
 
-class CondFunctionType : public FunctionType {
+class CondFunctionType : public Type {
 public:
-	CondFunctionType() : FunctionType() { }
 	std::string repr() {
 		std::ostringstream os;
 		os << "(#cond?)";
@@ -393,7 +302,6 @@ public:
 };
 
 Env::Env() {
-	env["+"] = std::make_shared<PlusFunctionType>();
 	env["def!"] = std::make_shared<DefFunctionType>();
 	env["fn*"] = std::make_shared<FnFunctionType>();
     env["cond?"] = std::make_shared<CondFunctionType>();
@@ -420,6 +328,11 @@ std::string Env::repr() {
 	return os.str();
 }
 
+/**
+ * Search chain of environment to find one containing key
+ * @param string key
+ * @return shared_ptr<Env> containing env
+ */
 shared_ptr<Env> Env::find(std::string key) {
 	auto it = env.find(key);
 	if (it != env.end()) {
@@ -427,16 +340,20 @@ shared_ptr<Env> Env::find(std::string key) {
 	} else if (outer) {
 		return outer->find(key);
 	}
-
 	return nullptr;
 }
 
+/**
+ * Search for key in current environment, otherwise look in outer scope.
+ *
+ * @param string key to look for
+ * @return shared_ptr<Type>
+ */
 shared_ptr<Type> Env::get(std::string key) {
 	auto it = env.find(key);
 	if (it != env.end()) {
 		return it->second;
 	} else {
-		//return nullptr;
 		auto cont = find(key);
 		if (cont) {
 			return cont->get(key);
@@ -520,7 +437,7 @@ public:
 		}
 
 		auto& p = peek();
-		trace("read_form peek: " << &p << "\n");
+		trace("read_form peek: " << p << "\n");
 		switch (p->type) {
 			case Tokens::Atom:
 				trace("read_form found: Atom Token\n");
@@ -562,10 +479,10 @@ public:
 			trace("read_list peek: " << &p << "\n");
 			switch (p->type) {
 				case Tokens::RightParen:
+					trace("read_list found closing paren: " << p << "\n");
 					get_token();
-					trace("read_list found closing paren: " << &p << "\n");
 					return l;
-					break;
+                // while parens are not balanced ignore newlines
 				case Tokens::NewLine:
                     if (balance) {
 						get_token();
@@ -582,25 +499,6 @@ public:
 		auto t = get_token();
 		trace("read_atom token: " << &t << "\n");
 		return shared_ptr<AtomType>(new AtomType(t->value));
-	}
-};
-
-// class Eval {
-// public:
-// 	unique_ptr<Type> eval(Type *ast);
-// 	unique_ptr<Type> eval_ast(Type* ast) {
-// 		if (dynamic_cast<AtomType*>(ast.get())) {
-// 			std::cout << "atom" << "\n";
-// 		}
-// 		if (dynamic_cast<ListType*>(ast.get())) {
-// 			std::cout << "list" << "\n";
-// 		}
-// 	}
-// };
-
-class Printer {
-public:
-	void print(Type t) {
 	}
 };
 
@@ -626,6 +524,7 @@ int main(int argc, char** argv) {
 				std::cout << "user> ";
 			}
 		}
+        std::cout << "\n";
 	}
 
 	Reader reader;
