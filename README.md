@@ -46,4 +46,4 @@ TODO List:
 * Replace List with Lambda closure cons
 * eq? operator for Atom comparison (required to build objects)
 * syntactic sugar for numeric types
-
+* exceptions

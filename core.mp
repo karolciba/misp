@@ -4,7 +4,7 @@
 (def! nil ())
 (def! false ())
 ; true if everything else, it lambda returning itself
-(def! true (fn* () true))
+(def! true (fn* () (true)))
 (def! neg
       (fn* (var)
            (cond?
