@@ -16,8 +16,8 @@ using std::weak_ptr;
 using std::make_shared;
 
 // Logging level
-int LEVEL = 5;
-//int LEVEL = 0;
+//int LEVEL = 5;
+int LEVEL = 0;
 
 // Available levels
 int DEBUG = 1;
@@ -53,7 +53,6 @@ public:
 		return os << "Token(" << t->type << "," << t->value << ")";
 	}
 };
-
 
 class Type;
 
@@ -345,6 +344,55 @@ public:
 	}
 };
 
+class UIntFunctionType : public Type {
+public:
+	std::string repr() {
+		std::ostringstream os;
+		os << "(#uint) ";
+		return os.str();
+	};
+	shared_ptr<Type> eval(shared_ptr<Env> env, shared_ptr<Type> inargs) {
+		auto fcar = env->get("_car");
+        shared_ptr<Type> number = fcar->eval(env, inargs);
+
+		shared_ptr<AtomType> name = std::dynamic_pointer_cast<AtomType>(number);
+		if (!name) {
+			error("UIntFunction expected object <AtomType> got " << typeid(number).name() << "\n");
+		}
+
+		unsigned int num = atoi(name->value.c_str());
+
+		shared_ptr<ConsType> list = make_shared<ConsType>();
+        for(int i = 0; i < num; i++) {
+            list = make_shared<ConsType>(list, list);
+		}
+
+		return list;
+	}
+};
+
+class LenFunctionType : public Type {
+public:
+    std::string repr() {
+        std::ostringstream os;
+        os << "(#len) ";
+        return os.str();
+    };
+    shared_ptr<Type> eval(shared_ptr<Env> env, shared_ptr<Type> inargs) {
+        auto fcar = env->get("_car");
+		auto fcdr = env->get("_cdr");
+        int len = 0;
+
+        shared_ptr<Type> next = fcar->eval(env,inargs)->eval(env);
+		while (next = fcdr->eval(env, next)) {
+			trace("LenFunction#eval left " << next->repr() << "\n");
+			len++;
+		}
+
+        return make_shared<AtomType>(std::to_string(len));
+    }
+};
+
 Env::Env() {
 	env["def!"] = std::make_shared<DefFunctionType>();
 	env["fn*"] = std::make_shared<FnFunctionType>();
@@ -352,6 +400,8 @@ Env::Env() {
 	env["_car"] = std::make_shared<CarFunctionType>();
 	env["_cdr"] = std::make_shared<CdrFunctionType>();
 	env["_cons"] = std::make_shared<ConsFunctionType>();
+	env["uint"] = std::make_shared<UIntFunctionType>();
+	env["len"] = std::make_shared<LenFunctionType>();
 }
 
 void Env::set(std::string key, shared_ptr<Type> value) {

@@ -36,6 +36,13 @@ Current list of primitives:
 5. ; comment
 
    Anything from semicolon (;) till end of the line will be treated as comment.
+   
+6. (uint N) (len X)
+
+   Numeric system in MISP is based on growing lists, (uint N) is a syntactic sugar
+   to ease creation of (cons (cons (cons (cons ...)))) and (len X) is simpler than
+   counting nested lists in output.
+
 
 For examples see core.mp file, which contains bootstrapped language definition.
 
@@ -43,7 +50,7 @@ Available online on [Misp on Repl.it](https://repl.it/@karolciba/MostlyImpractic
 
 TODO List:
 * Refactor, trim redundant code
-* Replace List with Lambda closure cons
+* Better printer for cons-lists.
 * eq? operator for Atom comparison (required to build objects)
 * syntactic sugar for numeric types
 * exceptions
