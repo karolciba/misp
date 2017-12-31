@@ -22,15 +22,10 @@
       )
 )
 
-; placeholders for inc and dec
-; till numeric support will be raplaced
-; by list concatenation
-(def! inc (fn* (x) (+ x 1)))
-
 ; cons, car and cdr encoding in lambda
 ; Church encoding see Wikipedia:
 ; https://en.wikipedia.org/wiki/Cons#Functional_Implementation
-(def! cons
+(def! lcons
       (fn* (x y)
            (fn* (m)
                 (m x y)
@@ -38,13 +33,13 @@
       )
 )
 
-(def! car
+(def! lcar
       (fn* (z)
            (z (fn* (p q) p))
       )
 )
 
-(def! cdr
+(def! lcdr
       (fn* (z)
            (z (fn* (p q) q))
       )

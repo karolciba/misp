@@ -1,4 +1,7 @@
 # MISP
+
+## Introduction
+
 MIcro liSP (or Mosty Impractical liSP) exercise implementation in C++ 
 aimed at achieving bare minimal Lisp support as exercise both in C++ and Lisp.
 
@@ -7,6 +10,8 @@ language to be implemented in MISP itself.
 
 Highly influenced by [Lisp in Less Than 200 Lines in C](https://carld.github.io/2017/06/20/lisp-in-less-than-200-lines-of-c.html)
 and [Make a Lisp](https://github.com/kanaka/mal).
+
+## Basics
 
 Current list of primitives:
 
@@ -48,7 +53,7 @@ For examples see core.mp file, which contains bootstrapped language definition.
 
 Available online on [Misp on Repl.it](https://repl.it/@karolciba/MostlyImpracticalLisp).
 
-TODO List:
+## TODO List
 * Refactor, trim redundant code
 * Better printer for cons-lists.
 * eq? operator for Atom comparison (required to build objects)
