@@ -57,5 +57,12 @@ Available online on [Misp on Repl.it](https://repl.it/@karolciba/MostlyImpractic
 * Refactor, trim redundant code
 * Better printer for cons-lists.
 * eq? operator for Atom comparison (required to build objects)
-* syntactic sugar for numeric types
 * exceptions
+* build dispatcher independent of RTTI
+  
+  i.e. structures with pointer to eval function type and data pointer. \
+  AFAIK embedded c++ lacks RTTI support.
+  
+## Consider
+* Represent nil by list consing itself?
+* Represent true/false by lambda calculus definition?

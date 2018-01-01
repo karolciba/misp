@@ -43,7 +43,11 @@ ConsType::ConsType(shared_ptr<Type> x, shared_ptr<Type> y) : head{x}, tail{y} { 
 
 std::string ConsType::repr() const {
     std::ostringstream os;
-    os << "(cons " << (head ? head->repr() : "nil") << " " << (tail ? tail->repr() : "nil" ) << ")";
+    os << "(cons ";
+    os << (head ? head->repr() : "nil");
+    os << " ";
+    os << (tail ? tail->repr() : "nil" );
+    os << ")";
     return os.str();
 }
 
@@ -92,7 +96,7 @@ shared_ptr<Type> LambdaType::eval(shared_ptr<Env> ienv, shared_ptr<Type> args) c
 
     /* local copy not to destroy original parameters names list */
     shared_ptr<Type> lbinds = binds;
-    while (lbinds && args) {
+    while (!lbinds->is_nil() && !args->is_nil()) {
         shared_ptr<AtomType> key = std::dynamic_pointer_cast<AtomType>(fcar->eval(env, lbinds));
         new_env->set(key->value, fcar->eval(env,args)->eval(ienv));
         lbinds = fcdr->eval(env, lbinds);
@@ -157,7 +161,7 @@ shared_ptr<Type> FnFunctionType::eval(shared_ptr<Env> env, shared_ptr<Type> args
     auto fcar = env->get("car");
     auto fcdr = env->get("cdr");
     shared_ptr<Type> binds = fcar->eval(env, args);
-    shared_ptr<Type> expr = fcar->eval(env,fcdr->eval(env, args));
+    shared_ptr<Type> expr = fcdr->eval(env, args);
 
     shared_ptr<LambdaType> ret = make_shared<LambdaType>(env, std::move(binds), std::move(expr));
 

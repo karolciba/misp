@@ -128,22 +128,45 @@ shared_ptr<ConsType> Reader::read_list() {
     // to ease cons-list construction
     std::deque<shared_ptr<Type>> list;
     shared_ptr<ConsType> head;
+    shared_ptr<Type> first;
+    shared_ptr<Type> second;
     while (true) {
         auto& p = peek();
         trace("read_list peek: " << &p << "\n");
         switch (p->type) {
-            case Tokens::RightParen:
+            case Tokens::RightParen: {
                 trace("read_list found closing paren: " << p << "\n");
                 get_token();
+                auto it = list.begin();
+                if (it == list.end()) {
+                    return make_shared<ConsType>();
+                }
+
+                first = *it;
+                if (++it == list.end()) {
+                    return make_shared<ConsType>(first);
+                }
+
+                second = *it;
+                head = make_shared<ConsType>(second, first);
+                ++it;
+                for (; it != list.end(); it++) {
+                    head = make_shared<ConsType>(*it, head);
+                }
+                /*
                 for (auto it : list) {
                     head = make_shared<ConsType>(it, head);
                 }
+                */
                 // if now list then return empty list instead of nullptr
+                /*
                 if (!head) {
                     head = make_shared<ConsType>();
                 }
+                */
 
                 return head;
+            }
                 // while parens are not balanced ignore newlines
             case Tokens::NewLine:
                 if (balance) {
@@ -157,6 +180,7 @@ shared_ptr<ConsType> Reader::read_list() {
         }
     }
 }
+
 shared_ptr<AtomType> Reader::read_atom() {
     auto t = get_token();
     trace("read_atom token: " << &t << "\n");

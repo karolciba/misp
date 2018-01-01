@@ -21,7 +21,7 @@ public:
 
     void set(std::string key, shared_ptr<Type> value);
     std::string repr();
-    shared_ptr<Env>find(std::string key);
+    shared_ptr<Env> find(std::string key);
     shared_ptr<Type> get(std::string key);
 };
 
