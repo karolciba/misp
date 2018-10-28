@@ -2,22 +2,24 @@
 #include <string.h>
 #include <stdlib.h>
 
-enum ttype { Eol, LeftParen, RightParen, Atom, Comment, NewLine, Error } ttype;
-enum otype { ONil, OPair, OAtom, OList, OFunc, ODict, OTrue, OInt, OError=255} otype;
+enum type {
+	ONil,
 
-/* TODO: replace with pairs usage */
-typedef struct token {
-	enum ttype type;
-	char * value;
-	struct token * next;
-} token;
+	OPair,
+	OAtom,
+	OList,
+	OFunc,
+	ODict,
+	OTrue,
+	OInt,
+	OError=255} type;
 
 struct pair;
 
 typedef struct pair * (*fn_ptr)(struct pair * pair, struct pair * env);
 
 typedef struct pair {
-	enum otype type;
+	enum type type;
 	int refs;
 	union {
 		struct pair * value;
@@ -44,7 +46,7 @@ static inline int is_nil( pair * obj) { return obj->type == OPair && obj->value 
 #define DEBUG 0
 #define info(...) if (DEBUG) printf(__VA_ARGS__)
 
-pair * pair_new(enum otype type) {
+pair * pair_new(enum type type) {
 	pair * pair = calloc(1, sizeof(pair));
 	pair->type = type;
 	/* one always need to call D_REF
@@ -53,7 +55,7 @@ pair * pair_new(enum otype type) {
 	return pair;
 }
 
-pair * pair_new_val(enum otype type, void * ptr) {
+pair * pair_new_val(enum type type, void * ptr) {
 	pair * pair = pair_new(type);
 	pair->value = ptr;
 	return pair;
@@ -181,10 +183,14 @@ pair * cons(pair * car, pair * cdr) {
 	return pair;
 }
 
+#define list0() list(nil())
 #define list1(p1) list(cons(p1, nil()))
 #define list2(p1,p2) list(cons(p1,cons(p2,nil())))
 #define list3(p1,p2,p3) list(cons(p1,cons(p2,cons(p3,nil()))))
 #define list4(p1,p2,p3,p4) list(cons(p1,cons(p2,cons(p3,cons(p4,nil())))))
+#define list5(p1,p2,p3,p4,p5) list(cons(p1,cons(p2,cons(p3,cons(p4,cons(p5,nil()))))))
+#define list6(p1,p2,p3,p4,p5,p6) list(cons(p1,cons(p2,cons(p3,cons(p4,cons(p5,cons(p6,nil())))))))
+#define list7(p1,p2,p3,p4,p5,p6,p7) list(cons(p1,cons(p2,cons(p3,cons(p4,cons(p5,cons(p6,cons(p7,nil()))))))))
 
 pair * list(pair * param) {
 	pair * ret = pair_new(OList);
@@ -209,6 +215,9 @@ pair * cdr(pair * p) {
 	if (is_list(p) && p->value) {
 		pair * l = pair_new(OList);
 		l->value = p->value->next;
+		if (is_nil(l->value)) {
+			return nil();
+		}
 		return l;
 	}
 
@@ -227,13 +236,15 @@ pair * fn_eq(pair * param, pair * env) {
 
 	if (first->type != second->type) {
 		// do nothing, return nil
-	} else if (is_nil(first)) {
+	} else if (is_nil(first) && is_nil(second)) {
 		ret = true();
-	} else if (is_list(first) && is_pair(first)) {
+	} else if (is_list(first) || is_pair(first)) {
 		pair * left = fn_eq(list2(car(first),car(second)), env);
-		pair * right = fn_eq(list2(cdr(first),cdr(second)), env);
-		if (is_nil(left) && is_nil(right)) {
-			ret = true();
+		if (!is_nil(left)) {
+			pair * right = fn_eq(list2(cdr(first),cdr(second)), env);
+            if (!is_nil(right)) {
+				ret = true();
+			}
 		}
 	} else if (is_atom(first) && strcmp(first->cvalue, second->cvalue) == 0) {
 		ret = true();
@@ -246,14 +257,13 @@ pair * fn_eq(pair * param, pair * env) {
 
 pair * fn_plus(pair * param, pair * env) {
 	(void) env;
-	pair * pair = pair_new(OInt);
-	pair->ivalue = 0;
-	while (!is_nil(param)) {
-		pair_print(param);
-		pair->ivalue += car(param)->ivalue;
-		param = cdr(param);
+	pair * ret = pair_new(OInt);
+	ret->ivalue = 0;
+	pair * p = car(param);
+	if (!is_nil(p)) {
+		ret->ivalue = p->ivalue + fn_plus(cdr(param), env)->ivalue;
 	}
-	return pair;
+	return ret;
 }
 
 pair * fn_minus(pair * param, pair * env) {
@@ -339,54 +349,40 @@ pair *dict_get(pair * param) {
 }
 
 
-token * token_new() {
-	token * token = calloc(1, sizeof(token));
+pair * token_new(enum type type, char * value) {
+	pair * token = calloc(1, sizeof(pair));
+	token->cvalue = value;
+	token->type = type;
 	return token;
 }
 
-void token_delete(token * token) {
-	if (token) {
-		if (token->value) {
-			free(token->value);
-		}
-		free(token);
-	}
-}
+#define is_whitespace(c) (c == ' ' || c == '\t')
+#define is_newline(c) (c == '\r' || c == '\n')
 
-void token_delete_recursive(token * head) {
-	token *next = head->next;
-	while (head) {
-		token_delete(head);
-		head = next;
-		next = head->next;
-	}
-}
-
-token * tokenize(char * param) {
+pair * tokenize(char * param) {
 	/* Algorithm invariant - start with dummy token, at the end remove */
-	token *head = token_new();
-	token *current = head;
-	token *next = NULL;
+	pair * head = nil();
+	pair * current = head;
+	pair * next;
 	int indent = 0;
 
 	while (*param) {
-		if (*param == ' '
-		    || *param == '\t') {
+		if (is_whitespace(*param)) {
 			param++;
 		} else if (*param == '(') {
 			param++;
 			indent++;
-			next = token_new();
-			next->type = LeftParen;
-			current->next = next;
-			current = next;
+			next = atom("(");
+			current->value = next;
+			current->next = nil();
+			current = current->next;
 		} else if (*param == ')') {
 			param++;
 			indent--;
-			next = token_new();
-			next->type = RightParen;
-			current->next = next;
-			current = next;
+			next = atom(")");
+			current->value = next;
+			current->next = nil();
+			current = current->next;
 		} else if (*param == '"') {
 			int len = 1;
 			char *pointer = param;
@@ -400,13 +396,12 @@ token * tokenize(char * param) {
 			len++;
 			char *value = malloc(len + 1);
 			value[len] = '\0';
+			/* TODO: fix copying */
 			strncpy(value, pointer, len);
-
-			next = token_new();
-			next->type = Atom;
-			next->value = value;
-			current->next = next;
-			current = next;
+			next = atom(value);
+			current->value = next;
+			current->next = nil();
+			current = current->next;
 		} else if (*param == ';') {
 			int len = 0;
 			char *pointer = param;
@@ -419,12 +414,12 @@ token * tokenize(char * param) {
 			}
 			char *value = malloc(len + 1);
 			value[len] = '\0';
+			/* TODO: fix copying */
 			strncpy(value, pointer, len);
-			next = token_new();
-			next->type = Comment;
-			next->value = value;
-			current->next = next;
-			current = next;
+			next = atom(value);
+			current->value = next;
+			current->next = nil();
+			current = current->next;
 		// TODO: add { } dictionary syntax
 		// TODO: add :intern syntax
 		// TODO: add 'quote or <quote> or /quote/ syntax
@@ -433,10 +428,10 @@ token * tokenize(char * param) {
 			while (*param == '\n' && *param == '\r') {
 				param++;
 			}
-			next = token_new();
-			next->type = NewLine;
-			current->next = next;
-			current = next;
+			next = atom("\n");
+			current->value = next;
+			current->next = nil();
+			current = current->next;
 		} else {
 			int len = 0;
 			char *pointer = param;
@@ -446,31 +441,27 @@ token * tokenize(char * param) {
 			}
 			char * value = malloc(len+1);
 			strncpy(value, pointer, len);
-			next = token_new();
-			next->type = Atom;
-			next->value = value;
-			current->next = next;
-			current = next;
+			/* TODO: fix copying */
+			next = atom(value);
+			current->value = next;
+			current->next = nil();
+			current = current->next;
 		}
-
 	}
 
 	if (indent) {
-		token * error = token_new();
-		error->type = Error;
 		char * value = malloc(100);
 		sprintf(value, "Unmached parentheses: %d", indent);
-		error->value = value;
+		pair * error = token_new(OError, value);
 		return error;
 	}
 
-	/* Remove invariant dummy head, and return real head */
-	current = head->next;
-	token_delete(head);
-	return current;
+	/* return as a list */
+	pair * l = list(head);
+	return l;
 }
 
-pair * read_atom(token * head, pair * env) {
+pair * read_atom(pair * head, pair * env) {
 	(void) env;
 	pair * obj = pair_new(OInt);
 
@@ -478,11 +469,11 @@ pair * read_atom(token * head, pair * env) {
 	char * endptr;
 
 	/* try to parse a number */
-	i = strtol(head->value, &endptr, 10);
+	i = strtol(head->cvalue, &endptr, 10);
 	/* if not a number */
 	if (*endptr != '\0') {
 		obj->type = OAtom;
-		obj->value = (pair *)strdup(head->value);
+		obj->cvalue = strdup(head->cvalue);
 		return obj;
 	}
 
@@ -490,38 +481,29 @@ pair * read_atom(token * head, pair * env) {
 	return obj;
 }
 
-pair * read_form(token *, pair * env);
+pair * read_form(pair *, pair * env);
 
-pair * read_list(token * head, pair * env) {
-	/* skip LeftParen */
-	/* TODO: sanity check */
+pair * read_list(pair * head, pair * env) {
+	/* skip left paren */
+	head = cdr(head);
 
-	head = head->next;
-	pair * top = pair_new(OList);
-
-	if (head && head->type == RightParen) {
-		return top;
-	}
-
-	pair * pointer = pair_new(OPair);
-	top->value = pointer;
+	pair * current = nil();
+	pair * ret = list(current);
 	pair * element;
-	while (head && head->type != RightParen) {
-		element = read_form(head, env);
-		pointer->value = element;
-		if (!head->next || head->next->type == RightParen) {
-			break;
-		}
-		pointer->next = pair_new(OPair);
-		pointer = pointer->next;
-		head = head->next;
+
+	while (*car(head)->cvalue != ')') {
+		element = read_form(car(head), env);
+		current->value = element;
+		current->next = nil();
+		current = current->next;
+		head = cdr(head);
 	}
 
-	return top;
+	return ret;
 }
 
-pair * read_form(token * head, pair * env) {
-	if (head->type == LeftParen) {
+pair * read_form(pair * head, pair * env) {
+	if (*head->cvalue == '(') {
 		return read_list(head, env);
 	}
 
@@ -529,18 +511,9 @@ pair * read_form(token * head, pair * env) {
 }
 
 pair * read(char * param, pair * env) {
-	token * head = tokenize(param);
+	pair * head = tokenize(param);
 	pair * obj = read_form(head, env);
 	return obj;
-
-	/* int len = strlen(param); */
-	/* char *out = malloc(len+1); */
-	/* char *cpy = out; */
-	/*  */
-	/* while (*param) { */
-	/* 	*cpy++ = *param++; */
-	/* } */
-	/* return out; */
 }
 
 pair * eval(pair * param, pair * env);
