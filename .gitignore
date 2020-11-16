@@ -32,3 +32,5 @@
 *.app
 
 venv/*
+
+cmake-build-debug/*
