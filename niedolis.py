@@ -7,6 +7,13 @@ def tokenize(chars: str):
     return [t for t in chars.replace('(', ' ( ').replace(')', ' ) ').split()]
 
 
+def atom(token: str):
+    try:
+        return int(token)
+    except ValueError:
+        return token
+
+
 def parse(tokens: list):
     token = tokens.pop(0)
     if token == '(':
@@ -16,7 +23,7 @@ def parse(tokens: list):
         tokens.pop(0)
         return tree
 
-    return token
+    return atom(token)
 
 
 def proc(params, def_env):
@@ -32,15 +39,28 @@ def proc(params, def_env):
 
 
 ENV = {
+    '+': lambda args, _: functools.reduce(op.add, args),
     'concat': lambda args, _: functools.reduce(op.concat, args),
     'fn*': proc
 }
 
 
 def eval(ast, env=ENV):
-    if type(ast) is str and ast[0] == "'":
+    if type(ast) is int:
+        return ast
+
+    if type(ast) is list and ast[0] == "quote":
         return ast[1:]
     if type(ast) is list and ast[0] == "quote":
+        return ast[1:]
+    if type(ast) is list and ast[0] == "null?":
+        return "'true" if len(ast[1]) == 0 else []
+    if type(ast) is list and ast[0] == "if":
+        (_, predicate, default, alternative) = ast
+        exp = default if eval(predicate, env) else alternative
+        return eval(exp, env)
+
+    if type(ast) is str and ast[0] == "'":
         return ast[1:]
     if type(ast) is str:
         return env[ast]
@@ -58,8 +78,8 @@ if __name__ == "__main__":
     #print(eval(parse(tokenize("(+ 'A 'B ( + 'E 'C) 'A (+ 'D 'L 'O))"))))
     while True:
         try:
-            ipt = "((fn* '(pre mid post) '(+ pre mid post)) '(a b c))"
-            #ipt = input(">")
+            ipt = "(+ 1 2)"
+            ipt = input(">")
             val = eval(parse(tokenize(ipt)))
             if val is None or val == ["(", "exit", ")"]:
                 break
