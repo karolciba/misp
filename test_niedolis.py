@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 from niedolis import *
 
+
 class TestNiedolis(unittest.TestCase):
     def setUp(self):
         pass
@@ -182,3 +183,17 @@ class TestNiedolis(unittest.TestCase):
         self.assertEqual("12", result)
         add_mock.assert_not_called()
         concat_mock.assert_called_once()
+
+    def test_lambda_created(self):
+        tokens = tokenize("(lambda (a b) (+ a b))")
+        ast = parse(tokens)
+
+        result = eval(ast)
+        self.assertIsNotNone(result)
+
+    def test_lambda_call(self):
+        tokens = tokenize("((lambda (a b) (+ a b)) 1 2)")
+        ast = parse(tokens)
+
+        result = eval(ast)
+        self.assertEqual(3, result)

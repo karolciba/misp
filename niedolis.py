@@ -26,13 +26,10 @@ def parse(tokens: list):
     return atom(token)
 
 
-def proc(params, def_env):
-    args = params[0]
-    body = params[1]
-
+def proc(names, body, def_env):
     def call_fun(args, call_env):
         n_env = {k: def_env[k] for k in def_env}
-        n_env.update(zip(params, args))
+        n_env.update(zip(names, args))
         return eval(body, n_env)
 
     return call_fun
@@ -41,7 +38,6 @@ def proc(params, def_env):
 ENV = {
     '+': lambda args, _: functools.reduce(op.add, args),
     'concat': lambda args, _: functools.reduce(op.concat, args),
-    'fn*': proc
 }
 
 
@@ -51,14 +47,16 @@ def eval(ast, env=ENV):
 
     if type(ast) is list and ast[0] == "quote":
         return ast[1:]
-    if type(ast) is list and ast[0] == "quote":
-        return ast[1:]
+
     if type(ast) is list and ast[0] == "null?":
         return "'true" if len(ast[1]) == 0 else []
     if type(ast) is list and ast[0] == "if":
         (_, predicate, default, alternative) = ast
         exp = default if eval(predicate, env) else alternative
         return eval(exp, env)
+    if type(ast) is list and ast[0] == "lambda":
+        (_, names, body) = ast
+        return proc(names, body, env)
 
     if type(ast) is str and ast[0] == "'":
         return ast[1:]
@@ -75,10 +73,8 @@ def eval(ast, env=ENV):
 
 
 if __name__ == "__main__":
-    #print(eval(parse(tokenize("(+ 'A 'B ( + 'E 'C) 'A (+ 'D 'L 'O))"))))
     while True:
         try:
-            ipt = "(+ 1 2)"
             ipt = input(">")
             val = eval(parse(tokenize(ipt)))
             if val is None or val == ["(", "exit", ")"]:
