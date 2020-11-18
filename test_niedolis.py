@@ -197,3 +197,38 @@ class TestNiedolis(unittest.TestCase):
 
         result = eval(ast)
         self.assertEqual(3, result)
+
+    def test_define_statement(self):
+        tokens = tokenize("(define 'x 5)")
+        ast = parse(tokens)
+        env = {}
+
+        eval(ast, env)
+        self.assertIn('x', env)
+        self.assertEqual(5, env['x'])
+
+    def test_use_defined_variable(self):
+        env = {k: v for k, v in ENV.items()}
+        eval(parse(tokenize("(define 'x 5)")), env)
+        eval(parse(tokenize("(define 'y 2)")), env)
+
+        tokens = tokenize("(+ x y)")
+        ast = parse(tokens)
+
+        result = eval(ast, env)
+        self.assertEqual(7, result)
+
+    def test_use_defined_lambda(self):
+        env = {k: v for k, v in ENV.items()}
+        eval(parse(tokenize("(define 'add "
+                            "        (lambda (a b)"
+                            "                (+ a b)"
+                            "        )"
+                            ")")), env)
+        eval(parse(tokenize("(define 'y 2)")), env)
+
+        tokens = tokenize("(add 1 y)")
+        ast = parse(tokens)
+
+        result = eval(ast, env)
+        self.assertEqual(3, result)

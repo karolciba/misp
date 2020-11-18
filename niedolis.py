@@ -51,12 +51,17 @@ def eval(ast, env=ENV):
     if type(ast) is list and ast[0] == "null?":
         return "'true" if len(ast[1]) == 0 else []
     if type(ast) is list and ast[0] == "if":
-        (_, predicate, default, alternative) = ast
+        _, predicate, default, alternative = ast
         exp = default if eval(predicate, env) else alternative
         return eval(exp, env)
     if type(ast) is list and ast[0] == "lambda":
-        (_, names, body) = ast
+        _, names, body = ast
         return proc(names, body, env)
+    if type(ast) is list and ast[0] == "define":
+        _, key, exp = ast
+        key = eval(key)
+        env[key] = eval(exp)
+        return env[key]
 
     if type(ast) is str and ast[0] == "'":
         return ast[1:]
