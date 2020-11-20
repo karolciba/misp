@@ -108,7 +108,6 @@ class TestNiedolis(unittest.TestCase):
         result = eval(ast)
         self.assertEqual(5, result)
 
-
     def test_eval_negative_additon(self):
         tokens = tokenize("(+ 7 -8)")
         ast = parse(tokens)
@@ -232,3 +231,51 @@ class TestNiedolis(unittest.TestCase):
 
         result = eval(ast, env)
         self.assertEqual(3, result)
+
+    def test_lambda_calculus_if_true(self):
+        env = {k: v for k, v in ENV.items()}
+        eval(parse(tokenize("(define 'l_true "
+                            "        (lambda (a b)"
+                            "                a"
+                            "        )"
+                            ")")), env)
+        eval(parse(tokenize("(define 'l_false "
+                            "        (lambda (a b)"
+                            "                 b"
+                            "        )"
+                            ")")), env)
+        eval(parse(tokenize("(define 'l_if "
+                            "        (lambda (p T F)"
+                            "                (p T F)"
+                            "        )"
+                            ")")), env)
+
+        tokens = tokenize("(l_if l_true 'a 'b')")
+        ast = parse(tokens)
+
+        result = eval(ast, env)
+        self.assertEqual("a", result)
+
+    def test_lambda_calculus_if_false(self):
+        env = {k: v for k, v in ENV.items()}
+        eval(parse(tokenize("(define 'l_true "
+                            "        (lambda (x y)"
+                            "                x"
+                            "        )"
+                            ")")), env)
+        eval(parse(tokenize("(define 'l_false "
+                            "        (lambda (x y)"
+                            "                 y"
+                            "        )"
+                            ")")), env)
+        eval(parse(tokenize("(define 'l_if "
+                            "        (lambda (p T F)"
+                            "                (p T F)"
+                            "        )"
+                            ")")), env)
+
+        tokens = tokenize("(l_if l_false 'a 'b)")
+        ast = parse(tokens)
+
+        result = eval(ast, env)
+        self.assertEqual("b", result)
